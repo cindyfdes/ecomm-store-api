@@ -2,10 +2,19 @@ import admin from "firebase-admin";
 import path from "path";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
+import * as dotenv from "dotenv";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const serviceAccount = path.join(__dirname, "./firebaseServiceAccountKey.json");
+dotenv.config();
+
+const serviceAccountBase64 = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+
+if (!serviceAccountBase64) {
+  throw new Error("Firebase service account key is missing.");
+}
+
+const serviceAccount = JSON.parse(
+  Buffer.from(serviceAccountBase64, "base64").toString("utf8")
+);
 
 if (!admin.apps.length) {
   admin.initializeApp({
