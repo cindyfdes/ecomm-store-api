@@ -1,11 +1,13 @@
 import express from "express";
-import { db } from "./configs/firebase-config/firebase-admin-config.js";
+
 import dotenv from "dotenv";
 dotenv.config();
 const app = express();
 const port = process.env.PORT;
 import cors from "cors";
-import { createNewUser } from "./operations/user/createUser.js";
+
+import { db } from "../configs/firebase-config/firebase-admin-config.js";
+import { createNewUser } from "./../operations/user/createUser.js";
 app.use(cors());
 app.use(express.json());
 

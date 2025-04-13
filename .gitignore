@@ -47,3 +47,5 @@ coverage/
 *.swp
 
 configs/firebase-config/firebaseServiceAccountKey.json
+.vercel
+.env
