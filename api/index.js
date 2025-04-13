@@ -9,6 +9,11 @@ import cors from "cors";
 import { db } from "../configs/firebase-config/firebase-admin-config.js";
 import { createNewUser } from "./../operations/user/createUser.js";
 app.use(cors());
+app.use(
+  cors({
+    origin: "http://localhost:3000", // Replace with your frontend URL
+  })
+);
 app.use(express.json());
 
 // Middleware to verify Firebase ID token
