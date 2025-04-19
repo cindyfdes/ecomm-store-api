@@ -40,6 +40,21 @@ app.get("/api/getAllProducts", async (req, res) => {
   }
 });
 
+app.get("/api/getProduct", async (req, res) => {
+  try {
+    const searchQuery = req.query.searchKeyword?.toLowerCase() || "";
+    const snapshot = await db.collection("products").get();
+    console.log("searchquery", searchQuery);
+    const products = snapshot.docs
+      .map((doc) => doc.data())
+      .filter((product) => product.title?.toLowerCase().includes(searchQuery));
+
+    res.json(products);
+  } catch (error) {
+    res.status(500).send("Error getting product : " + error);
+  }
+});
+
 app.post("/api/user/save-new-user", async (req, res) => {
   try {
     console.log(req.body);
