@@ -49,7 +49,7 @@ app.get("/api/getProduct", async (req, res) => {
       .map((doc) => doc.data())
       .filter((product) => product.title?.toLowerCase().includes(searchQuery));
 
-    res.json(products);
+    res.status(200).send(products);
   } catch (error) {
     res.status(500).send("Error getting product : " + error);
   }
@@ -82,9 +82,10 @@ app.get("/api/cart/getUserCart", async (req, res) => {
     );
 
     const filtered = productDetails?.filter((item) => item !== null);
-    res.json(filtered);
+    console.log("fileterd products", filtered);
+    res.status(200).send(filtered);
   } catch (error) {
-    res.status(500).send("Error getting product : " + error);
+    res.status(500).send("Error getting cart items : " + error);
   }
 });
 
@@ -100,7 +101,6 @@ app.post("/api/cart/save-cart-item", async (req, res) => {
       .where("productId", "==", productId)
       .get();
     if (!snapshot.empty) {
-      // 2. If item exists, update quantity
       const existingDoc = snapshot.docs[0];
       const existingData = existingDoc.data();
 
@@ -109,7 +109,6 @@ app.post("/api/cart/save-cart-item", async (req, res) => {
         updatedAt: new Date(),
       });
     } else {
-      // 3. Else, create a new cart item
       await db.collection("cart").add({
         email,
         productId,
@@ -127,9 +126,7 @@ app.post("/api/cart/save-cart-item", async (req, res) => {
 app.post("/api/cart/delete-cart-item", async (req, res) => {
   try {
     console.log(req.body);
-    const { email, productId, quantity } = req.body;
-
-    console.log(email, productId);
+    const { email, productId } = req.body;
     const snapshot = await db
       .collection("cart")
       .where("email", "==", email)
