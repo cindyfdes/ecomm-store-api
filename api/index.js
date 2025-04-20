@@ -55,6 +55,100 @@ app.get("/api/getProduct", async (req, res) => {
   }
 });
 
+app.get("/api/cart/getUserCart", async (req, res) => {
+  try {
+    const { email } = req.headers;
+    const cartSnapshot = await db
+      .collection("cart")
+      .where("email", "==", email)
+      .get();
+
+    const cartItems = cartSnapshot.docs?.map((doc) => doc.data());
+
+    const productDetails = await Promise.all(
+      cartItems.map(async (item) => {
+        const productsSnapshot = await db
+          .collection("products")
+          .where("id", "==", item.productId)
+          .get();
+
+        if (!productsSnapshot.empty) {
+          const product = productsSnapshot.docs[0].data();
+          return { product: product, quantity: item.quantity };
+        }
+
+        return null;
+      })
+    );
+
+    const filtered = productDetails?.filter((item) => item !== null);
+    res.json(filtered);
+  } catch (error) {
+    res.status(500).send("Error getting product : " + error);
+  }
+});
+
+app.post("/api/cart/save-cart-item", async (req, res) => {
+  try {
+    console.log(req.body);
+    const { email, productId, quantity } = req.body;
+
+    console.log(email, productId);
+    const snapshot = await db
+      .collection("cart")
+      .where("email", "==", email)
+      .where("productId", "==", productId)
+      .get();
+    if (!snapshot.empty) {
+      // 2. If item exists, update quantity
+      const existingDoc = snapshot.docs[0];
+      const existingData = existingDoc.data();
+
+      await db.collection("cart").doc(existingDoc.id).update({
+        quantity: quantity,
+        updatedAt: new Date(),
+      });
+    } else {
+      // 3. Else, create a new cart item
+      await db.collection("cart").add({
+        email,
+        productId,
+        quantity,
+        createdAt: new Date(),
+      });
+    }
+    res.status(200).json({ message: "Item added to cart successfully!" });
+  } catch (error) {
+    console.error("Error saving user:", error);
+    res.status(500).json({ error: "Something went wrong" });
+  }
+});
+
+app.post("/api/cart/delete-cart-item", async (req, res) => {
+  try {
+    console.log(req.body);
+    const { email, productId, quantity } = req.body;
+
+    console.log(email, productId);
+    const snapshot = await db
+      .collection("cart")
+      .where("email", "==", email)
+      .where("productId", "==", productId)
+      .get();
+
+    if (snapshot.empty) {
+      return res.status(200).json({ message: "No matching cart item found" });
+    }
+
+    const deletePromises = snapshot.docs.map((doc) => doc.ref.delete());
+    await Promise.all(deletePromises);
+    res.status(200).json({ message: "Deleted item from cart successfully!" });
+  } catch (error) {
+    console.error("Error saving user:", error);
+    res.status(500).json({ error: "Something went wrong" });
+  }
+});
+
 app.post("/api/user/save-new-user", async (req, res) => {
   try {
     console.log(req.body);
