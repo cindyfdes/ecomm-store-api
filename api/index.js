@@ -8,6 +8,7 @@ import cors from "cors";
 
 import { db } from "../configs/firebase-config/firebase-admin-config.js";
 import { createNewUser } from "./../operations/user/createUser.js";
+import { verifyFirebaseToken } from "../operations/firebase-token/verify-firebase-token.js";
 app.use(
   cors({
     origin: true,
@@ -15,20 +16,6 @@ app.use(
   })
 );
 app.use(express.json());
-
-// Middleware to verify Firebase ID token
-const authenticate = async (req, res, next) => {
-  const token = req.headers.authorization?.split("Bearer ")[1];
-  if (!token) return res.status(401).send("No token provided");
-
-  try {
-    const decoded = await admin.auth().verifyIdToken(token);
-    req.user = decoded;
-    next();
-  } catch (err) {
-    res.status(401).send("Invalid or expired token");
-  }
-};
 
 app.get("/api/getAllProducts", async (req, res) => {
   try {
@@ -55,12 +42,12 @@ app.get("/api/getProduct", async (req, res) => {
   }
 });
 
-app.get("/api/cart/getUserCart", async (req, res) => {
+app.get("/api/cart/getUserCart", verifyFirebaseToken, async (req, res) => {
   try {
-    const { email } = req.headers;
+    console.log(" req.user.email", req.user.email);
     const cartSnapshot = await db
       .collection("cart")
-      .where("email", "==", email)
+      .where("email", "==", req.user.email)
       .get();
 
     const cartItems = cartSnapshot.docs?.map((doc) => doc.data());
@@ -89,15 +76,13 @@ app.get("/api/cart/getUserCart", async (req, res) => {
   }
 });
 
-app.post("/api/cart/save-cart-item", async (req, res) => {
+app.post("/api/cart/save-cart-item", verifyFirebaseToken, async (req, res) => {
   try {
-    console.log(req.body);
-    const { email, productId, quantity } = req.body;
+    const { productId, quantity } = req.body;
 
-    console.log(email, productId);
     const snapshot = await db
       .collection("cart")
-      .where("email", "==", email)
+      .where("email", "==", req.user.email)
       .where("productId", "==", productId)
       .get();
     if (!snapshot.empty) {
@@ -110,7 +95,7 @@ app.post("/api/cart/save-cart-item", async (req, res) => {
       });
     } else {
       await db.collection("cart").add({
-        email,
+        email: req.user.email,
         productId,
         quantity,
         createdAt: new Date(),
@@ -123,28 +108,32 @@ app.post("/api/cart/save-cart-item", async (req, res) => {
   }
 });
 
-app.post("/api/cart/delete-cart-item", async (req, res) => {
-  try {
-    console.log(req.body);
-    const { email, productId } = req.body;
-    const snapshot = await db
-      .collection("cart")
-      .where("email", "==", email)
-      .where("productId", "==", productId)
-      .get();
+app.post(
+  "/api/cart/delete-cart-item",
+  verifyFirebaseToken,
+  async (req, res) => {
+    try {
+      console.log(req.body);
+      const { email, productId } = req.body;
+      const snapshot = await db
+        .collection("cart")
+        .where("email", "==", req.user.email)
+        .where("productId", "==", productId)
+        .get();
 
-    if (snapshot.empty) {
-      return res.status(200).json({ message: "No matching cart item found" });
+      if (snapshot.empty) {
+        return res.status(200).json({ message: "No matching cart item found" });
+      }
+
+      const deletePromises = snapshot.docs.map((doc) => doc.ref.delete());
+      await Promise.all(deletePromises);
+      res.status(200).json({ message: "Deleted item from cart successfully!" });
+    } catch (error) {
+      console.error("Error saving user:", error);
+      res.status(500).json({ error: "Something went wrong" });
     }
-
-    const deletePromises = snapshot.docs.map((doc) => doc.ref.delete());
-    await Promise.all(deletePromises);
-    res.status(200).json({ message: "Deleted item from cart successfully!" });
-  } catch (error) {
-    console.error("Error saving user:", error);
-    res.status(500).json({ error: "Something went wrong" });
   }
-});
+);
 
 app.post("/api/user/save-new-user", async (req, res) => {
   try {

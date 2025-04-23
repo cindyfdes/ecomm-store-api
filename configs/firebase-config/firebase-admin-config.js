@@ -1,7 +1,4 @@
 import admin from "firebase-admin";
-import path from "path";
-import { fileURLToPath } from "url";
-import { dirname } from "path";
 import * as dotenv from "dotenv";
 
 dotenv.config();
@@ -22,4 +19,4 @@ if (!admin.apps.length) {
   });
 }
 const db = admin.firestore();
-export { db };
+export { db, admin };
