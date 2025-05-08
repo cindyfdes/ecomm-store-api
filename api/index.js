@@ -5,10 +5,12 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT;
 import cors from "cors";
+import { getFirestore, collection, doc, deleteDoc } from "firebase/firestore";
 
 import { db } from "../configs/firebase-config/firebase-admin-config.js";
 import { createNewUser } from "./../operations/user/createUser.js";
 import { verifyFirebaseToken } from "../operations/firebase-token/verify-firebase-token.js";
+import { FieldValue } from "firebase-admin/firestore";
 app.use(
   cors({
     origin: true,
@@ -27,11 +29,28 @@ app.get("/api/getAllProducts", async (req, res) => {
   }
 });
 
+app.get("/api/getAllCategories", async (req, res) => {
+  try {
+    const snapshot = await db.collection("category").get();
+    const categories = snapshot.docs.map((doc) => ({
+      categoryId: doc.id,
+      ...doc.data(),
+    }));
+    res.json(categories);
+  } catch (error) {
+    res.status(500).send("Error getting category: " + error);
+  }
+});
+
 app.get("/api/getProduct", async (req, res) => {
   try {
     const searchQuery = req.query.searchKeyword?.toLowerCase() || "";
-    const snapshot = await db.collection("products").get();
-    console.log("searchquery", searchQuery);
+    const category = req.query.category || "";
+    const query = category
+      ? db.collection("products").where("category", "==", category)
+      : db.collection("products");
+
+    const snapshot = await query.get();
     const products = snapshot.docs
       .map((doc) => doc.data())
       .filter((product) => product.title?.toLowerCase().includes(searchQuery));
@@ -44,13 +63,15 @@ app.get("/api/getProduct", async (req, res) => {
 
 app.get("/api/cart/getUserCart", verifyFirebaseToken, async (req, res) => {
   try {
-    console.log(" req.user.email", req.user.email);
     const cartSnapshot = await db
       .collection("cart")
       .where("email", "==", req.user.email)
       .get();
 
-    const cartItems = cartSnapshot.docs?.map((doc) => doc.data());
+    const cartItems = cartSnapshot.docs?.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
 
     const productDetails = await Promise.all(
       cartItems.map(async (item) => {
@@ -61,7 +82,7 @@ app.get("/api/cart/getUserCart", verifyFirebaseToken, async (req, res) => {
 
         if (!productsSnapshot.empty) {
           const product = productsSnapshot.docs[0].data();
-          return { product: product, quantity: item.quantity };
+          return { product: product, quantity: item.quantity, cartId: item.id };
         }
 
         return null;
@@ -72,36 +93,36 @@ app.get("/api/cart/getUserCart", verifyFirebaseToken, async (req, res) => {
     console.log("fileterd products", filtered);
     res.status(200).send(filtered);
   } catch (error) {
+    console.log(error);
     res.status(500).send("Error getting cart items : " + error);
   }
 });
 
 app.post("/api/cart/save-cart-item", verifyFirebaseToken, async (req, res) => {
   try {
-    const { productId, quantity } = req.body;
-
-    const snapshot = await db
-      .collection("cart")
-      .where("email", "==", req.user.email)
-      .where("productId", "==", productId)
-      .get();
-    if (!snapshot.empty) {
-      const existingDoc = snapshot.docs[0];
-      const existingData = existingDoc.data();
-
-      await db.collection("cart").doc(existingDoc.id).update({
-        quantity: quantity,
-        updatedAt: new Date(),
-      });
+    const { productId, quantity, cartId } = req.body;
+    let updatedCartId;
+    if (cartId) {
+      await db
+        .collection("cart")
+        .doc(cartId)
+        .update({
+          quantity: FieldValue.increment(quantity),
+          updatedAt: new Date(),
+        });
     } else {
-      await db.collection("cart").add({
+      const docRef = await db.collection("cart").add({
         email: req.user.email,
         productId,
         quantity,
         createdAt: new Date(),
       });
+      updatedCartId = docRef.id;
     }
-    res.status(200).json({ message: "Item added to cart successfully!" });
+    res.status(200).json({
+      message: "Item added to cart successfully!",
+      cartId: updatedCartId,
+    });
   } catch (error) {
     console.error("Error saving user:", error);
     res.status(500).json({ error: "Something went wrong" });
@@ -113,23 +134,11 @@ app.post(
   verifyFirebaseToken,
   async (req, res) => {
     try {
-      console.log(req.body);
-      const { email, productId } = req.body;
-      const snapshot = await db
-        .collection("cart")
-        .where("email", "==", req.user.email)
-        .where("productId", "==", productId)
-        .get();
-
-      if (snapshot.empty) {
-        return res.status(200).json({ message: "No matching cart item found" });
-      }
-
-      const deletePromises = snapshot.docs.map((doc) => doc.ref.delete());
-      await Promise.all(deletePromises);
+      const { cartId } = req.body;
+      await db.collection("cart").doc(cartId).delete();
       res.status(200).json({ message: "Deleted item from cart successfully!" });
     } catch (error) {
-      console.error("Error saving user:", error);
+      console.error("Error deleting items from cart:", error);
       res.status(500).json({ error: "Something went wrong" });
     }
   }
